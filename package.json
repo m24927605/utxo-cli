@@ -1,0 +1,32 @@
+{
+  "name": "omni-cli",
+  "version": "1.0.0",
+  "description": "This is a CLI tool for Omni-layer transaction.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/m24927605/omni-cli.git"
+  },
+  "keywords": [
+    "omni-layer"
+  ],
+  "author": "Michael",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/m24927605/omni-cli/issues"
+  },
+  "homepage": "https://github.com/m24927605/omni-cli#readme",
+  "dependencies": {
+    "bip32": "^1.0.2",
+    "bip39": "^2.5.0",
+    "bitcoinjs-lib": "^3.1.1",
+    "chalk": "^2.4.2",
+    "figlet": "^1.2.1",
+    "inquirer": "^6.2.2",
+    "rxjs": "^6.4.0",
+    "shelljs": "^0.8.3"
+  }
+}
