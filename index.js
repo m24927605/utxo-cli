@@ -4,15 +4,31 @@ const figlet = require("figlet");
 const shell = require("shelljs");
 const bitcoin = require('bitcoinjs-lib');
 const { Observable } = require('rxjs');
+const _=require('lodash');
 const addrService=require('./lib/addr');
+const apiService=require('./lib/api');
+const TXService=require('./lib/tx');
+let NETWORK='';
+let COINTYPE='';
+
+const init = () => {
+  console.log(
+    chalk.green(
+      figlet.textSync("UTXO CLI", {
+        font: "Ghost",
+        horizontalLayout: "default",
+        verticalLayout: "default"
+      })
+    )
+  );
+}
 
 const walletObserve =  Observable.create((obs) => {
-
   obs.next({
     name: "cryptoCoinType",
     type: 'list',
     message: "Please choose the coin type(btc or omni layer coin).",
-    choices:[{ name: 'btc', value: 'btc' },{ name: 'omni-layer coin', value: 'omni' }]
+    choices:[{ name: 'BTC', value: 'btc' },{ name: 'OMNI-LAYER coin', value: 'omni' },{ name: 'BCH', value: 'bch' },{ name: 'LTC', value: 'ltc' }]
   });
 
   obs.next({
@@ -31,7 +47,7 @@ const walletObserve =  Observable.create((obs) => {
   obs.next({
     name: "addressCount",
     type: "number",
-    message: "How many addresses do you want to generate?"
+    message: "How many addresses do you want to list?"
   });
 
   obs.next({
@@ -44,48 +60,101 @@ const walletObserve =  Observable.create((obs) => {
 });
 
 const serviceObserve =  Observable.create((obs) => {
-
   obs.next({
     name: "serviceType",
     type: 'list',
     message: 'What services do you want?',
-    choices: [{ name: 'API', value: 'API' },{ name: 'wallet', value: 'wallet' }]
+    choices: [{ name: 'API services', value: 'API' },{ name: 'do Transaction', value: 'doTX' }]
   });
 
   obs.complete();
 });
 
-const txObserve =  Observable.create((obs) => {
-
+const featureKindObserve =  Observable.create((obs) => {
   obs.next({
-    name: "wantTX",
-    message: 'Do you want to do a trasaction?',
-    default: false
+    name: "featureKind",
+    type: 'list',
+    message: 'What feature do you want to do?',
+    choices: [{ name: 'Show balance', value: 'balance' },{ name: 'Show unspent', value: 'unspent' },{ name: 'Show transaction history', value: 'TXHistory' }]
   });
 
   obs.complete();
 });
 
-const init = () => {
-  console.log(
-    chalk.green(
-      figlet.textSync("BTC/OMNI CLI", {
-        font: "Ghost",
-        horizontalLayout: "default",
-        verticalLayout: "default"
-      })
-    )
-  );
+const pickAddressObserve = (addresses) =>{
+  let addressArray=[];
+  for(let i=0;i<addresses.length;i++){
+    addressArray.push(addresses[i].address);
+  }
+  return Observable.create((obs) => {
+    obs.next({
+      name: "mutiAddress",
+      type: 'checkbox',
+      message: 'Please pick address to be fromAddress in transaction:',
+      choices: addressArray
+    });
+  
+    obs.complete();
+  });
 }
+
+const pickOneAddressObserve = (addresses) =>{
+  let addressArray=[];
+  for(let i=0;i<addresses.length;i++){
+    addressArray.push(addresses[i].address);
+  }
+  return Observable.create((obs) => {
+    obs.next({
+      name: "oneAddress",
+      type: 'list',
+      message: 'Please pick address to be fromAddress in transaction:',
+      choices: addressArray
+    });
+  
+    obs.complete();
+  });
+}
+
+const changeAddressObserve = (addresses)=>{
+  let addressArray=[];
+  for(let i=0;i<addresses.length;i++){
+    addressArray.push(addresses[i].address);
+  }
+  return Observable.create((obs) => {
+    obs.next({
+      name: "changeAddress",
+      type: 'list',
+      message: 'Please pick one address to be change receive address in transaction:',
+      choices: addressArray
+    });
+  
+    obs.complete();
+  });
+}
+
+const toAddressObserve =  Observable.create((obs) => {
+  obs.next({
+    name: "toAddress",
+    type:'input',
+    message: 'Please key in receive address'
+  });
+
+  obs.complete();
+});
 
 const servicePrompt=()=>{
   return new Promise(async(resolve,reject)=>{
-    let service=await inquirer.prompt(serviceObserve);
-    const { serviceType} = service;
-    if(serviceType==='API'){
-      reject(new Error('not yet'));
-    }
-    resolve();
+    let {serviceType} =await inquirer.prompt(serviceObserve);
+    console.log(serviceType)
+    resolve(serviceType);
+  })
+}
+
+const featureKindPrompt=()=>{
+  return new Promise(async(resolve,reject)=>{
+    let data=await inquirer.prompt(featureKindObserve);
+    const { featureKind} = data;
+    resolve(featureKind);
   })
 }
 
@@ -95,6 +164,8 @@ const walletPrompt=()=>{
       inquirer.prompt(walletObserve)
       .then(async(answers) => {
         const { mnemonic,addressType, addressCount ,network,cryptoCoinType} = answers;
+        COINTYPE=cryptoCoinType;
+        (network==='mainnet')?NETWORK='mainnet':NETWORK='testnet';
         (network==='mainnet')?netType=bitcoin.networks.bitcoin:netType=bitcoin.networks.testnet;
         let addrArray= await addrService.genAddress(mnemonic,addressCount,netType,addressType);
         for(let i=0;i<addrArray.length;i++){
@@ -108,23 +179,79 @@ const walletPrompt=()=>{
   })
 }
 
-const tx=()=>{
-  return new Promise((resolve,reject)=>{
-    inquirer.prompt(txObserve)
-    .then((yesOrnot)=>{
-      if(yesOrnot){
-      
+const pickOneAddressPrompt=(addresses)=>{
+  return new Promise(async(resolve,reject)=>{
+    try{
+      let {oneAddress}=await inquirer.prompt(pickOneAddressObserve(addresses));
+      console.log('You pick address:'+address);
+      resolve(oneAddress);
+    }catch(e){
+      reject(e);
+    }
+  })
+}
+
+const pickAddressPrompt=(addresses)=>{
+  return new Promise(async(resolve,reject)=>{
+    try{
+      let { mutiAddress}=await inquirer.prompt(pickAddressObserve(addresses));
+      console.log('You pick address:'+address);
+      resolve(mutiAddress);
+    }catch(e){
+      reject(e);
+    }
+  })
+}
+
+const APIfeatureService=(feature,address,network)=>{
+  return new Promise(async(resolve,reject)=>{
+    try{
+      let data=null;
+      switch (feature) {
+        case 'balance':
+          data= await apiService.getBalance(address,network);
+          break;
+        case 'unspent':
+          data= await apiService.getUnspent(address,network);
+          break;
+        case 'TXHistory':
+          data= await apiService.getTXHistory(address,network);
+          break;
+        default:
+          break;
       }
-    })
+      resolve(data);
+    }catch(e){
+      reject(e);
+    }
   })
 }
 
 const main =async () => {
   try{
     init();
-    await servicePrompt();
-    let data= await walletPrompt();
-    console.log(data);
+    let walletData= await walletPrompt();
+    let serviceType = await servicePrompt();
+    if(serviceType==='API'){
+      let address=await pickOneAddressPrompt(walletData.addresses);
+      console.log(address);
+      let feature= await featureKindPrompt();
+      let APIData= await APIfeatureService(feature,address,NETWORK);
+      console.log(APIData);
+    }
+    else if (serviceType==='doTX'){
+      let address= await pickAddressPrompt(walletData.addresses);
+      console.log(address);
+      const conditionArray=[];
+      for(let i=0;i<address.length;i++){
+        conditionArray.push({address:address[i]});
+      }
+      let pickWalletData= _.intersectionBy(walletData.addresses, conditionArray, 'address');
+      let {toAddress}=await inquirer.prompt(toAddressObserve);
+      let {changeAddress}=await inquirer.prompt(changeAddressObserve);
+       await TXService.doTX(pickWalletData,network,toAddress,changeAddress);
+    }
+
   }catch(e){
     console.log(chalk.red(e.message));
   }
